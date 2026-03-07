@@ -124,7 +124,8 @@ public class OrderServiceImpl implements OrderService {
             eventPublisher.publishEvent(new OrderPaidEvent(
                     savedOrder.getId(),
                     savedOrder.getTotalAmount(),
-                    savedOrder.getTenantId()
+                    savedOrder.getTenantId(),
+                    savedOrder.getTableId()
             ));
         }
         else {
@@ -186,7 +187,8 @@ public class OrderServiceImpl implements OrderService {
         eventPublisher.publishEvent(new ngo.cong.thao.s2o_pro.order.event.OrderPaidEvent(
                 savedOrder.getId(),
                 savedOrder.getTotalAmount(),
-                savedOrder.getTenantId()
+                savedOrder.getTenantId(),
+                savedOrder.getTableId()
         ));
 
         // Bắn thông báo về Bếp để giải phóng màn hình (Tùy chọn)
