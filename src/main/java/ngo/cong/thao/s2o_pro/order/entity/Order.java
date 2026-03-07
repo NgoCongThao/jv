@@ -49,6 +49,17 @@ public class Order extends TenantAwareEntity {
     @Column(name = "delivery_notes")
     private String deliveryNotes;
 
+    // --- THÔNG TIN THANH TOÁN ---
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_method")
+    private PaymentMethod paymentMethod;
+
+    @Column(name = "amount_given")
+    private java.math.BigDecimal amountGiven; // Tiền khách đưa
+
+    @Column(name = "change_amount")
+    private java.math.BigDecimal changeAmount; // Tiền trả lại
+
     // Liên kết với chi tiết đơn hàng (1 đơn có nhiều món)
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default

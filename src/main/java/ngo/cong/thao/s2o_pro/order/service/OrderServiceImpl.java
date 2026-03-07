@@ -127,6 +127,70 @@ public class OrderServiceImpl implements OrderService {
                     savedOrder.getTenantId()
             ));
         }
+        else {
+            // --- THÊM MỚI TẠI ĐÂY: Bắn thông báo Real-time cho Thu ngân/Phục vụ ---
+            String tableName = (savedOrder.getTableId() != null && !savedOrder.getTableId().isEmpty())
+                    ? savedOrder.getTableId()
+                    : "Giao hàng/Mang đi";
+            notificationService.notifyOrderStatusChanged(
+                    savedOrder.getTenantId(),
+                    savedOrder.getId().toString(),
+                    newStatus.name(),
+                    tableName
+            );
+        }
+
+        return savedOrder;
+    }
+    @Override
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<Order> getOrdersByStatuses(java.util.List<OrderStatus> statuses, org.springframework.data.domain.Pageable pageable) {
+        // Nếu không truyền status nào thì lấy tất cả
+        if (statuses == null || statuses.isEmpty()) {
+            return orderRepository.findAll(pageable);
+        }
+        return orderRepository.findAllByStatusInOrderByCreatedAtAsc(statuses, pageable);
+    }
+    @Override
+    @Transactional
+    public Order payOrder(UUID orderId, ngo.cong.thao.s2o_pro.order.dto.OrderPayRequest request) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy đơn hàng"));
+
+        // 1. Dùng State Engine kiểm tra xem đơn này có được phép thanh toán không (Phải đang DONE hoặc DELIVERED)
+        stateEngine.validateTransition(order.getStatus(), OrderStatus.PAID, order.getOrderType());
+
+        // 2. Tính toán tiền thừa nếu thanh toán bằng Tiền mặt
+        BigDecimal amountGiven = request.getAmountGiven();
+        BigDecimal changeAmount = BigDecimal.ZERO;
+
+        if (request.getPaymentMethod() == ngo.cong.thao.s2o_pro.order.entity.PaymentMethod.CASH) {
+            if (amountGiven == null || amountGiven.compareTo(order.getTotalAmount()) < 0) {
+                throw new IllegalArgumentException("Số tiền khách đưa không đủ để thanh toán!");
+            }
+            changeAmount = amountGiven.subtract(order.getTotalAmount());
+        } else {
+            // Chuyển khoản hoặc Quẹt thẻ thì mặc định coi như đưa vừa đủ
+            amountGiven = order.getTotalAmount();
+        }
+
+        // 3. Cập nhật dữ liệu
+        order.setStatus(OrderStatus.PAID);
+        order.setPaymentMethod(request.getPaymentMethod());
+        order.setAmountGiven(amountGiven);
+        order.setChangeAmount(changeAmount);
+
+        Order savedOrder = orderRepository.save(order);
+
+        // 4. Kích hoạt Event bắn pháo hoa
+        eventPublisher.publishEvent(new ngo.cong.thao.s2o_pro.order.event.OrderPaidEvent(
+                savedOrder.getId(),
+                savedOrder.getTotalAmount(),
+                savedOrder.getTenantId()
+        ));
+
+        // Bắn thông báo về Bếp để giải phóng màn hình (Tùy chọn)
+        notificationService.notifyOrderStatusChanged(savedOrder.getTenantId(), savedOrder.getId().toString(), "PAID", savedOrder.getTableId() != null ? savedOrder.getTableId() : "Giao hàng");
 
         return savedOrder;
     }

@@ -35,4 +35,31 @@ public class NotificationService {
 
         log.info("🚀 Đã bắn thông báo Real-time tới Bếp nhà hàng [{}]. Bàn: {}", tenantId, tableName);
     }
+    /**
+     * Gửi thông báo cập nhật trạng thái đơn hàng (VD: Bếp làm xong -> Báo cho Phục vụ/Thu ngân)
+     */
+    public void notifyOrderStatusChanged(String tenantId, String orderId, String newStatus, String tableName) {
+        // Cấu trúc URL Kênh (Topic) dành cho Thu ngân / Phục vụ: /topic/tenant/{tenantId}/cashier
+        String destination = "/topic/tenant/" + tenantId + "/cashier";
+
+        // Tùy chỉnh câu thông báo cho sinh động
+        String alertMessage;
+        if ("DONE".equals(newStatus)) {
+            alertMessage = "✅ Món của bàn " + tableName + " đã xong. Phục vụ mang lên ngay nhé!";
+        } else if ("READY".equals(newStatus)) {
+            alertMessage = "🛵 Đơn giao hàng đã chuẩn bị xong. Vui lòng gọi Shipper!";
+        } else {
+            alertMessage = "🔄 Đơn hàng của bàn " + tableName + " vừa chuyển sang trạng thái: " + newStatus;
+        }
+
+        Map<String, String> payload = Map.of(
+                "type", "STATUS_UPDATE",
+                "orderId", orderId,
+                "status", newStatus,
+                "message", alertMessage
+        );
+
+        messagingTemplate.convertAndSend(destination, payload);
+        log.info("🚀 Đã bắn thông báo Trạng thái đơn [{}] tới Thu ngân nhà hàng [{}]. Bàn: {}", newStatus, tenantId, tableName);
+    }
 }

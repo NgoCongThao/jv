@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Màn Hình Phục Vụ (Test WebSocket)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+</head>
+<body style="font-family: Arial, sans-serif; padding: 20px;">
+<h2>👨‍🍳 Màn Hình Phục Vụ</h2>
+<div id="messages" style="border: 1px solid #ccc; padding: 15px; height: 300px; overflow-y: scroll; background: #f9f9f9; border-radius: 8px;">
+    <i>Đang kết nối đến Trạm trung chuyển...</i><br/>
+</div>
+
+<script>
+    // --- BẠN NHỚ COPY CHÍNH XÁC TENANT_ID DÁN VÀO ĐÂY NHÉ ---
+    // Phải trùng 100% với cái tenantId bạn lấy trong database
+    var tenantId = "4fcdc17a-9a97-4f57-8988-9215c6d480bb";
+    // --------------------------------------------------------
+
+    var socket = new SockJS('http://localhost:8080/ws');
+    var stompClient = Stomp.over(socket);
+
+    stompClient.connect({}, function (frame) {
+        var div = document.getElementById('messages');
+        div.innerHTML += "<p style='color: green;'>✅ Đã kết nối thành công! Đang chờ đơn hàng mới...</p>";
+
+        var topic = '/topic/tenant/' + tenantId + '/cashier';
+        console.log("Đang theo dõi kênh: " + topic); // In ra console F12 để dễ debug
+
+        stompClient.subscribe(topic, function (message) {
+            var payload = JSON.parse(message.body);
+            div.innerHTML += "<p style='color: #d93025; font-weight: bold; font-size: 16px; margin: 10px 0; border-bottom: 1px dashed #ccc; padding-bottom: 10px;'>"
+                + payload.message + " (Mã: " + payload.orderId + ")</p>";
+
+            // Cuộn xuống dòng mới nhất
+            div.scrollTop = div.scrollHeight;
+        });
+    }, function(error) {
+        document.getElementById('messages').innerHTML += "<p style='color: red;'>❌ Lỗi kết nối WebSocket!</p>";
+    });
+</script>
+</body>
+</html>

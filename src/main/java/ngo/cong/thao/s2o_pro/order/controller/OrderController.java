@@ -41,4 +41,34 @@ public class OrderController {
         Order updatedOrder = orderService.updateOrderStatus(id, status);
         return ResponseEntity.ok(ApiResponse.success(OrderResponse.fromEntity(updatedOrder)));
     }
+
+    // LẤY DANH SÁCH ĐƠN HÀNG THEO TRẠNG THÁI (Dùng cho Màn hình Bếp / Thu ngân)
+    @GetMapping
+    @PreAuthorize("hasAnyRole('OWNER', 'CASHIER', 'CHEF')")
+    public ResponseEntity<ApiResponse<org.springframework.data.domain.Page<OrderResponse>>> getOrders(
+            @RequestParam(required = false) java.util.List<OrderStatus> statuses,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+
+        org.springframework.data.domain.Page<Order> orderPage = orderService.getOrdersByStatuses(
+                statuses,
+                org.springframework.data.domain.PageRequest.of(page, size)
+        );
+
+        // Map từ Entity sang DTO
+        org.springframework.data.domain.Page<OrderResponse> responsePage = orderPage.map(OrderResponse::fromEntity);
+
+        return ResponseEntity.ok(ApiResponse.success(responsePage));
+    }
+
+    // THANH TOÁN ĐƠN HÀNG (Dành riêng cho Thu ngân)
+    @PostMapping("/{id}/pay")
+    @PreAuthorize("hasAnyRole('OWNER', 'CASHIER')")
+    public ResponseEntity<ApiResponse<OrderResponse>> payOrder(
+            @PathVariable UUID id,
+            @Valid @RequestBody ngo.cong.thao.s2o_pro.order.dto.OrderPayRequest request) {
+
+        Order paidOrder = orderService.payOrder(id, request);
+        return ResponseEntity.ok(ApiResponse.success(OrderResponse.fromEntity(paidOrder)));
+    }
 }

@@ -31,7 +31,7 @@ public class MenuController {
 
     // --- API TẠO DANH MỤC (Dùng tạm để có Category ID test tạo món) ---
     @PostMapping("/categories")
-    @PreAuthorize("hasRole('RESTAURANT_OWNER')")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponse<MenuCategory>> createCategory(@RequestBody MenuCategory category) {
         category.setTenantId(TenantContext.getTenantId());
         MenuCategory savedCategory = menuCategoryRepository.save(category);
@@ -40,7 +40,7 @@ public class MenuController {
 
     // --- API TẠO MÓN ĂN ---
     @PostMapping("/items")
-    @PreAuthorize("hasRole('RESTAURANT_OWNER') or hasRole('CHEF')")
+    @PreAuthorize("hasRole('OWNER') or hasRole('CHEF')")
     public ResponseEntity<ApiResponse<MenuItemResponse>> createMenuItem(@Valid @RequestBody MenuItemRequest request) {
         MenuItem menuItem = MenuItem.builder()
                 .name(request.getName())

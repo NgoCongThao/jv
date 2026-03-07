@@ -21,7 +21,7 @@ public class BotFaqController {
 
     // --- API 1: Dành cho Chủ quán "dạy" Bot ---
     @PostMapping("/faqs")
-    @PreAuthorize("hasRole('RESTAURANT_OWNER')")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponse<BotFaq>> createFaq(@RequestBody BotFaq botFaq) {
         BotFaq savedFaq = botFaqService.createFaq(botFaq);
         return ResponseEntity.ok(ApiResponse.success(savedFaq));
@@ -29,7 +29,7 @@ public class BotFaqController {
 
     // --- API 2: Dành cho Khách hàng Chat với Bot ---
     @PostMapping("/chat")
-    @PreAuthorize("hasAnyRole('RESTAURANT_OWNER', 'CUSTOMER', 'GUEST')")
+    @PreAuthorize("hasAnyRole('OWNER', 'CUSTOMER', 'GUEST')")
     public ResponseEntity<ApiResponse<String>> chatWithBot(@Valid @RequestBody BotChatRequest request) {
         String answer = botFaqService.getAnswer(request.getQuestion());
         return ResponseEntity.ok(ApiResponse.success(answer));

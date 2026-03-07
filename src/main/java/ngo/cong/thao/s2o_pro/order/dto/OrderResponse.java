@@ -27,7 +27,9 @@ public class OrderResponse {
     private String customerPhone;
     private String deliveryAddress;
     private String deliveryNotes;
-
+    private String paymentMethod;
+    private BigDecimal amountGiven;
+    private BigDecimal changeAmount;
     private List<OrderItemResponse> items;
 
     public static OrderResponse fromEntity(Order order) {
@@ -44,6 +46,9 @@ public class OrderResponse {
                 .items(order.getItems().stream()
                         .map(OrderItemResponse::fromEntity)
                         .collect(Collectors.toList()))
+                .paymentMethod(order.getPaymentMethod() != null ? order.getPaymentMethod().name() : null)
+                .amountGiven(order.getAmountGiven())
+                .changeAmount(order.getChangeAmount())
                 .build();
     }
 }
