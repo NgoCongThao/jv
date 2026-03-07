@@ -32,7 +32,7 @@ public class DataSeeder implements CommandLineRunner {
                     .username("admin")
                     .password(passwordEncoder.encode("123456")) // Mã hóa mật khẩu
                     .fullName("Quản trị viên Hệ thống")
-                    .role(Role.PLATFORM_ADMIN)
+                    .role(Role.ADMIN)
                     .tenantId(null) // Admin không thuộc nhà hàng nào
                     .isActive(true)
                     .build();
@@ -55,7 +55,7 @@ public class DataSeeder implements CommandLineRunner {
                     .username("owner_biendong")
                     .password(passwordEncoder.encode("123456")) // Mã hóa mật khẩu
                     .fullName("Chủ nhà hàng Biển Đông")
-                    .role(Role.RESTAURANT_OWNER)
+                    .role(Role.OWNER)
                     .tenantId(tenant.getId().toString()) // Gắn ID của nhà hàng vào user này
                     .isActive(true)
                     .build();

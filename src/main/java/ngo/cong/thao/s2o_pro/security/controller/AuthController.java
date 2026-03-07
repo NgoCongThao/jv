@@ -82,4 +82,13 @@ public class AuthController {
         }
         return ResponseEntity.ok(ApiResponse.success("Đăng xuất thành công, Token đã bị thu hồi."));
     }
+    @GetMapping("/debug-role")
+    public ResponseEntity<Object> debugRole() {
+        // Lấy thông tin user đang đăng nhập từ Context của Spring Security
+        org.springframework.security.core.Authentication auth =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+
+        // Trả về thẳng cho Postman xem Spring Security đang chứa cái gì
+        return ResponseEntity.ok(auth.getAuthorities());
+    }
 }

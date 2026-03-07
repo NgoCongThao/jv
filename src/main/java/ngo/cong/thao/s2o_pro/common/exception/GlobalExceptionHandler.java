@@ -15,6 +15,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGeneralException(Exception ex) {
         // Trong thực tế sẽ log lỗi ra file ở đây
+        ex.printStackTrace();
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error(500, "Lỗi máy chủ: " + ex.getMessage()));
     }
@@ -35,4 +36,9 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(400, ex.getMessage()));
     }
     // Sau này chúng ta sẽ thêm các Custom Exception (như NotFoundException) vào đây
+    // Bắt riêng lỗi thiếu quyền hạn và trả về 403 Forbidden
+    @org.springframework.web.bind.annotation.ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<ngo.cong.thao.s2o_pro.common.response.ApiResponse<Object>> handleAccessDeniedException(org.springframework.security.access.AccessDeniedException ex) {
+        return ResponseEntity.status(403).body(ngo.cong.thao.s2o_pro.common.response.ApiResponse.error(403, "Từ chối truy cập: Bạn không có quyền gọi API này!"));
+    }
 }

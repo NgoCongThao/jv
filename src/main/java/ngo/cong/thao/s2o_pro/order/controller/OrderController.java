@@ -25,7 +25,7 @@ public class OrderController {
 
     // TẠO ĐƠN HÀNG MỚI
     @PostMapping
-    @PreAuthorize("hasAnyRole('RESTAURANT_OWNER', 'CASHIER', 'CUSTOMER', 'GUEST')")
+    @PreAuthorize("hasAnyRole('OWNER', 'CASHIER', 'CUSTOMER', 'GUEST')")
     public ResponseEntity<ApiResponse<OrderResponse>> createOrder(@Valid @RequestBody OrderRequest request) {
         Order savedOrder = orderService.createOrder(request);
         return ResponseEntity.ok(ApiResponse.success(OrderResponse.fromEntity(savedOrder)));
@@ -33,7 +33,7 @@ public class OrderController {
 
     // CẬP NHẬT TRẠNG THÁI (Test State Machine)
     @PutMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('RESTAURANT_OWNER', 'CASHIER', 'CHEF')")
+    @PreAuthorize("hasAnyRole('OWNER', 'CASHIER', 'CHEF')")
     public ResponseEntity<ApiResponse<OrderResponse>> updateOrderStatus(
             @PathVariable UUID id,
             @RequestParam OrderStatus status) {

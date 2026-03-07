@@ -54,6 +54,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)) // Không lưu session trên server
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll() // Mở cửa cho API đăng nhập/đăng ký
+                        .requestMatchers("/ws/**").permitAll()// MỞ CỬA CHO WEBSOCKET
                         .anyRequest().authenticated() // Tất cả các API khác đều cần token
                 );
 

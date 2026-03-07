@@ -11,6 +11,7 @@ import ngo.cong.thao.s2o_pro.order.entity.OrderType;
 import ngo.cong.thao.s2o_pro.order.event.OrderPaidEvent;
 import ngo.cong.thao.s2o_pro.order.repository.OrderRepository;
 import ngo.cong.thao.s2o_pro.tenant.TenantContext;
+import ngo.cong.thao.s2o_pro.common.service.NotificationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +26,10 @@ public class OrderServiceImpl implements OrderService {
     private final MenuItemRepository menuItemRepository;
     private final OrderStateEngine stateEngine;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
+
+    // THÊM: Inject NotificationService để bắn thông báo Real-time
+    private final NotificationService notificationService;
+
     @Override
     @Transactional
     public Order createOrder(OrderRequest request) {
@@ -81,7 +86,24 @@ public class OrderServiceImpl implements OrderService {
         }
 
         order.setTotalAmount(totalAmount);
-        return orderRepository.save(order);
+
+        // 4. Lưu vào Database
+        Order savedOrder = orderRepository.save(order);
+
+        // --- 5. GỌI WEBSOCKET ĐỂ BÁO CHO BẾP ---
+        // Xử lý tên bàn hoặc loại đơn linh hoạt
+        String tableName = (request.getTableId() != null && !request.getTableId().isEmpty())
+                ? request.getTableId()
+                : (request.getOrderType() == OrderType.DELIVERY ? "Giao hàng" : "Mang đi");
+
+        notificationService.notifyKitchenNewOrder(
+                savedOrder.getTenantId(),
+                tableName,
+                savedOrder.getId().toString()
+        );
+        // ----------------------------------------
+
+        return savedOrder;
     }
 
     @Override
