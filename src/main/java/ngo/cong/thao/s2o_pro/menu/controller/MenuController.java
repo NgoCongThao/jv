@@ -66,4 +66,12 @@ public class MenuController {
 
         return ResponseEntity.ok(ApiResponse.success(responsePage));
     }
+
+    // --- API TẠM NGƯNG / MỞ BÁN LẠI MÓN ĂN (Soft Delete) ---
+    @PutMapping("/items/{id}/toggle-status")
+    @PreAuthorize("hasAnyRole('OWNER', 'MANAGER')")
+    public ResponseEntity<ApiResponse<MenuItemResponse>> toggleMenuItemStatus(@PathVariable UUID id) {
+        MenuItem updatedItem = menuService.toggleMenuItemStatus(id);
+        return ResponseEntity.ok(ApiResponse.success(MenuItemResponse.fromEntity(updatedItem)));
+    }
 }

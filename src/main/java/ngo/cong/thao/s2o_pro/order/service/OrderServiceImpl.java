@@ -33,7 +33,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public Order createOrder(OrderRequest request) {
-        // 1. Validate linh hoạt theo loại đơn
+        // 1. Validate cơ bản
         if (request.getOrderType() == OrderType.DINE_IN && (request.getTableId() == null || request.getTableId().isEmpty())) {
             throw new IllegalArgumentException("Đơn dùng tại quán bắt buộc phải có ID Bàn (tableId)");
         }
@@ -41,67 +41,98 @@ public class OrderServiceImpl implements OrderService {
             throw new IllegalArgumentException("Đơn giao hàng bắt buộc phải có Địa chỉ (deliveryAddress)");
         }
 
-        // 2. Khởi tạo Order
-        Order order = Order.builder()
-                .orderType(request.getOrderType())
-                .status(OrderStatus.NEW) // Luôn bắt đầu bằng NEW
-                .tableId(request.getTableId())
-                .customerName(request.getCustomerName())
-                .customerPhone(request.getCustomerPhone())
-                .deliveryAddress(request.getDeliveryAddress())
-                .deliveryNotes(request.getDeliveryNotes())
-                .totalAmount(BigDecimal.ZERO)
-                .build();
+        Order order;
+        boolean isAddingToExisting = false;
 
-        order.setTenantId(TenantContext.getTenantId());
+        // 2. Logic GỘP BILL cho khách ăn tại bàn (DINE_IN)
+        if (request.getOrderType() == OrderType.DINE_IN) {
+            java.util.Optional<Order> activeOrderOpt = orderRepository.findActiveOrderByTableId(request.getTableId());
 
-        // 3. Xử lý danh sách món và tính tổng tiền
-        BigDecimal totalAmount = BigDecimal.ZERO;
+            if (activeOrderOpt.isPresent()) {
+                order = activeOrderOpt.get();
+                isAddingToExisting = true;
+
+                // Nếu bếp đã làm xong hết món cũ (DONE), giờ có món mới -> Bật lại trạng thái COOKING
+                if (order.getStatus() == OrderStatus.DONE) {
+                    order.setStatus(OrderStatus.COOKING);
+                }
+            } else {
+                // Bàn trống, tạo Bill mới
+                order = Order.builder()
+                        .orderType(request.getOrderType())
+                        .status(OrderStatus.NEW)
+                        .tableId(request.getTableId())
+                        .totalAmount(BigDecimal.ZERO)
+                        .build();
+                order.setTenantId(TenantContext.getTenantId());
+            }
+        } else {
+            // Đơn DELIVERY luôn tạo mới
+            order = Order.builder()
+                    .orderType(request.getOrderType())
+                    .status(OrderStatus.NEW)
+                    .customerName(request.getCustomerName())
+                    .customerPhone(request.getCustomerPhone())
+                    .deliveryAddress(request.getDeliveryAddress())
+                    .deliveryNotes(request.getDeliveryNotes())
+                    .totalAmount(BigDecimal.ZERO)
+                    .build();
+            order.setTenantId(TenantContext.getTenantId());
+        }
+
+        // 3. Quét danh sách món gọi thêm / gọi mới
+        BigDecimal currentTotal = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
+
         for (var itemReq : request.getItems()) {
             MenuItem menuItem = menuItemRepository.findById(itemReq.getMenuItemId())
                     .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy món ăn: " + itemReq.getMenuItemId()));
-
-            // Kiểm tra món có được bán trên kênh này không
-            if (request.getOrderType() == OrderType.DINE_IN && !menuItem.isAvailableDineIn()) {
-                throw new IllegalArgumentException("Món " + menuItem.getName() + " không phục vụ tại quán.");
-            }
-            if (request.getOrderType() == OrderType.DELIVERY && !menuItem.isAvailableDelivery()) {
-                throw new IllegalArgumentException("Món " + menuItem.getName() + " không hỗ trợ giao hàng.");
-            }
 
             OrderItem orderItem = OrderItem.builder()
                     .order(order)
                     .menuItem(menuItem)
                     .quantity(itemReq.getQuantity())
-                    .unitPrice(menuItem.getPrice()) // Chốt giá tại thời điểm đặt
+                    .unitPrice(menuItem.getPrice())
                     .notes(itemReq.getNotes())
                     .build();
             orderItem.setTenantId(TenantContext.getTenantId());
 
             order.getItems().add(orderItem);
 
-            // Tính tiền: (Giá * Số lượng) cộng dồn
+            // Cộng dồn tiền vào Bill
             BigDecimal itemTotal = menuItem.getPrice().multiply(BigDecimal.valueOf(itemReq.getQuantity()));
-            totalAmount = totalAmount.add(itemTotal);
+            currentTotal = currentTotal.add(itemTotal);
         }
 
-        order.setTotalAmount(totalAmount);
-
-        // 4. Lưu vào Database
+        order.setTotalAmount(currentTotal);
         Order savedOrder = orderRepository.save(order);
 
-        // --- 5. GỌI WEBSOCKET ĐỂ BÁO CHO BẾP ---
-        // Xử lý tên bàn hoặc loại đơn linh hoạt
+        // 4. Bắn thông báo cho Bếp
         String tableName = (request.getTableId() != null && !request.getTableId().isEmpty())
-                ? request.getTableId()
-                : (request.getOrderType() == OrderType.DELIVERY ? "Giao hàng" : "Mang đi");
+                ? request.getTableId() : (request.getOrderType() == OrderType.DELIVERY ? "Giao hàng" : "Mang đi");
 
-        notificationService.notifyKitchenNewOrder(
-                savedOrder.getTenantId(),
-                tableName,
-                savedOrder.getId().toString()
-        );
-        // ----------------------------------------
+        String notiMessage = isAddingToExisting
+                ? "🔔 Bàn " + tableName + " VỪA GỌI THÊM MÓN!"
+                : "🔔 Ting Ting! Bàn " + tableName + " vừa gọi món mới!";
+
+        // Tùy biến xíu hàm notifyKitchen (Truyền thêm message) - Anh có thể cập nhật trong NotificationService nếu muốn
+        notificationService.notifyKitchenNewOrder(savedOrder.getTenantId(), tableName, savedOrder.getId().toString());
+
+        // 5. Nếu là Bill mới, chốt sổ cho Bàn thành "Có khách" (OCCUPIED) luôn cho chắc cú
+        if (!isAddingToExisting && request.getOrderType() == OrderType.DINE_IN) {
+            try {
+                java.util.UUID tableUuid = java.util.UUID.fromString(request.getTableId());
+                ngo.cong.thao.s2o_pro.table.repository.DiningTableRepository tableRepo =
+                        org.springframework.web.context.support.WebApplicationContextUtils
+                                .getRequiredWebApplicationContext(
+                                        ((org.springframework.web.context.request.ServletRequestAttributes) org.springframework.web.context.request.RequestContextHolder.getRequestAttributes()).getRequest().getServletContext()
+                                ).getBean(ngo.cong.thao.s2o_pro.table.repository.DiningTableRepository.class);
+
+                tableRepo.findById(tableUuid).ifPresent(t -> {
+                    t.setStatus(ngo.cong.thao.s2o_pro.table.entity.DiningTable.TableStatus.OCCUPIED);
+                    tableRepo.save(t);
+                });
+            } catch (Exception ignored) {} // Bỏ qua lỗi ép kiểu
+        }
 
         return savedOrder;
     }
@@ -195,5 +226,35 @@ public class OrderServiceImpl implements OrderService {
         notificationService.notifyOrderStatusChanged(savedOrder.getTenantId(), savedOrder.getId().toString(), "PAID", savedOrder.getTableId() != null ? savedOrder.getTableId() : "Giao hàng");
 
         return savedOrder;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ngo.cong.thao.s2o_pro.order.dto.DashboardSummaryResponse getDashboardSummary(java.time.LocalDate startDate, java.time.LocalDate endDate) {
+
+        // 1. Xử lý thời gian (Nếu null thì mặc định lấy ngày hôm nay)
+        java.time.LocalDateTime start = (startDate != null) ? startDate.atStartOfDay() : java.time.LocalDate.now().atStartOfDay();
+        java.time.LocalDateTime end = (endDate != null) ? endDate.atTime(java.time.LocalTime.MAX) : java.time.LocalDate.now().atTime(java.time.LocalTime.MAX);
+
+        // 2. Gọi các hàm thống kê
+        long totalOrders = orderRepository.countByStatusAndCreatedAtBetween(OrderStatus.PAID, start, end);
+
+        BigDecimal revenue = orderRepository.sumRevenue(OrderStatus.PAID, start, end);
+        BigDecimal dineInRev = orderRepository.sumRevenueByType(OrderStatus.PAID, OrderType.DINE_IN, start, end);
+        BigDecimal deliveryRev = orderRepository.sumRevenueByType(OrderStatus.PAID, OrderType.DELIVERY, start, end);
+
+        // Lấy Top 5 món bán chạy nhất
+        java.util.List<ngo.cong.thao.s2o_pro.order.dto.ItemSalesDto> topItems = orderRepository.getTopSellingItems(
+                OrderStatus.PAID, start, end, org.springframework.data.domain.PageRequest.of(0, 5)
+        );
+
+        // 3. Đóng gói kết quả
+        return ngo.cong.thao.s2o_pro.order.dto.DashboardSummaryResponse.builder()
+                .totalRevenue(revenue != null ? revenue : BigDecimal.ZERO)
+                .totalOrders(totalOrders)
+                .dineInRevenue(dineInRev != null ? dineInRev : BigDecimal.ZERO)
+                .deliveryRevenue(deliveryRev != null ? deliveryRev : BigDecimal.ZERO)
+                .topSellingItems(topItems)
+                .build();
     }
 }

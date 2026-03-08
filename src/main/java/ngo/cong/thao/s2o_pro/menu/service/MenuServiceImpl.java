@@ -50,5 +50,20 @@ public class MenuServiceImpl implements MenuService {
         menuItem.setTenantId(TenantContext.getTenantId());
 
         return menuItemRepository.save(menuItem);
+
+    }
+    // CẬP NHẬT TRẠNG  THÁI MÓN
+    @Override
+    @Transactional
+    // Xóa cache để menu cập nhật ngay lập tức cho khách
+    @CacheEvict(value = "menu_items_v2", key = "T(ngo.cong.thao.s2o_pro.tenant.TenantContext).getTenantId() + '-*'", allEntries = true)
+    public MenuItem toggleMenuItemStatus(UUID id) {
+        MenuItem item = menuItemRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy món ăn"));
+
+        // Đảo ngược trạng thái: Nếu đang bán (true) thì thành Ngưng bán (false) và ngược lại
+        item.setActive(!item.isActive());
+
+        return menuItemRepository.save(item);
     }
 }

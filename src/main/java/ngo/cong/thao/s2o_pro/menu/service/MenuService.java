@@ -9,4 +9,5 @@ import java.util.UUID;
 public interface MenuService {
     Page<MenuItem> getAllMenuItems(Pageable pageable);
     MenuItem createMenuItem(MenuItem menuItem, UUID categoryId);
+    MenuItem toggleMenuItemStatus(java.util.UUID id);
 }

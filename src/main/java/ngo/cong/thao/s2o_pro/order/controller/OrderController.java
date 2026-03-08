@@ -71,4 +71,15 @@ public class OrderController {
         Order paidOrder = orderService.payOrder(id, request);
         return ResponseEntity.ok(ApiResponse.success(OrderResponse.fromEntity(paidOrder)));
     }
+
+    // API LẤY THỐNG KÊ DOANH THU (Có thể truyền thêm ?startDate=2024-01-01&endDate=2024-01-31)
+    @GetMapping("/dashboard/summary")
+    @PreAuthorize("hasAnyRole('OWNER', 'MANAGER')")
+    public ResponseEntity<ApiResponse<ngo.cong.thao.s2o_pro.order.dto.DashboardSummaryResponse>> getDashboardSummary(
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate endDate) {
+
+        ngo.cong.thao.s2o_pro.order.dto.DashboardSummaryResponse summary = orderService.getDashboardSummary(startDate, endDate);
+        return ResponseEntity.ok(ApiResponse.success(summary));
+    }
 }

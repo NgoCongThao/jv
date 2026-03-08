@@ -24,4 +24,18 @@ public class DiningTableController {
         DiningTable table = tableService.createTable(name);
         return ResponseEntity.ok(ApiResponse.success(table));
     }
+
+    // API ĐẶT BÀN TRƯỚC (Dành cho Lễ tân, Quản lý, Chủ)
+    @PostMapping("/{id}/reserve")
+    @PreAuthorize("hasAnyRole('OWNER', 'MANAGER', 'CASHIER')")
+    public ResponseEntity<ApiResponse<ngo.cong.thao.s2o_pro.table.entity.TableReservation>> reserveTable(
+            @PathVariable java.util.UUID id,
+            @RequestParam String customerName,
+            @RequestParam String phone,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) java.time.LocalDateTime time,
+            @RequestParam(defaultValue = "2") int guestCount) {
+
+        ngo.cong.thao.s2o_pro.table.entity.TableReservation reservation = tableService.reserveTable(id, customerName, phone, time, guestCount);
+        return ResponseEntity.ok(ApiResponse.success(reservation));
+    }
 }

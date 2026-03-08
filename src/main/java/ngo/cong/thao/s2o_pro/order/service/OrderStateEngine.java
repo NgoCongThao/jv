@@ -22,7 +22,8 @@ public class OrderStateEngine {
         VALID_TRANSITIONS.put(OrderStatus.PREPARING, Set.of(OrderStatus.READY));
         VALID_TRANSITIONS.put(OrderStatus.READY, Set.of(OrderStatus.OUT_FOR_DELIVERY));
         VALID_TRANSITIONS.put(OrderStatus.OUT_FOR_DELIVERY, Set.of(OrderStatus.DELIVERED));
-        VALID_TRANSITIONS.put(OrderStatus.DONE, Set.of(OrderStatus.PAID));
+        // Đã sửa: Cho phép từ DONE quay lại COOKING (nếu khách gọi thêm món)
+        VALID_TRANSITIONS.put(OrderStatus.DONE, Set.of(OrderStatus.PAID, OrderStatus.COOKING));
         VALID_TRANSITIONS.put(OrderStatus.DELIVERED, Set.of(OrderStatus.PAID));
 
         // PAID và CANCELLED là trạng thái cuối, không đi tiếp được
