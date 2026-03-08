@@ -29,7 +29,7 @@ public class BotFaqController {
 
     // --- API 2: Dành cho Khách hàng Chat với Bot ---
     @PostMapping("/chat")
-    @PreAuthorize("hasAnyRole('OWNER', 'CUSTOMER', 'GUEST')")
+    @PreAuthorize("hasAnyRole('ADMIN','OWNER', 'CUSTOMER', 'GUEST')")
     public ResponseEntity<ApiResponse<String>> chatWithBot(@Valid @RequestBody BotChatRequest request) {
         String answer = botFaqService.getAnswer(request.getQuestion());
         return ResponseEntity.ok(ApiResponse.success(answer));
