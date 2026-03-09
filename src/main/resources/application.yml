@@ -26,4 +26,9 @@ jwt:
   expiration: 86400000
 gemini:
   api:
-    key:
+    key: ${GEMINI_API_KEY:}
+vnpay:
+  tmn-code: "BQZV6E3R"
+  hash-secret: "DXRPTHKJVXW0VOK0LG4A0T6XHGTCKEEZ"
+  pay-url: "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
+  return-url: "http://localhost:8080/api/payment/vnpay/return"

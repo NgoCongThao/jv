@@ -158,6 +158,15 @@ public class OrderServiceImpl implements OrderService {
                     savedOrder.getTenantId(),
                     savedOrder.getTableId()
             ));
+        }else if (newStatus == OrderStatus.READY && savedOrder.getOrderType() == OrderType.DELIVERY) {
+            // Bắn sự kiện: Bếp nấu xong đơn Giao hàng -> Tự động tạo Vận đơn
+            eventPublisher.publishEvent(new ngo.cong.thao.s2o_pro.order.event.OrderReadyForDeliveryEvent(
+                    savedOrder.getId(),
+                    savedOrder.getTenantId()
+            ));
+
+            // Vẫn giữ thông báo WebSocket cho Thu ngân biết để gọi Shipper
+            notificationService.notifyOrderStatusChanged(savedOrder.getTenantId(), savedOrder.getId().toString(), "READY", "Giao hàng");
         }
         else {
             // --- THÊM MỚI TẠI ĐÂY: Bắn thông báo Real-time cho Thu ngân/Phục vụ ---

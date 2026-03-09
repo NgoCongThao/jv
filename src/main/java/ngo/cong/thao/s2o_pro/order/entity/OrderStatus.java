@@ -9,6 +9,7 @@ public enum OrderStatus {
     DONE,               // Đã lên món (DINE_IN)
     OUT_FOR_DELIVERY,   // Đang giao (DELIVERY)
     DELIVERED,          // Đã giao tới (DELIVERY)
-    PAID,               // Đã thanh toán (Hoàn thành)
+    PAID,
+    PENDING_PAYMENT,// Đã thanh toán (Hoàn thành)
     CANCELLED           // Hủy đơn
 }

@@ -55,6 +55,12 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll() // Mở cửa cho API đăng nhập/đăng ký
                         .requestMatchers("/ws/**").permitAll()// MỞ CỬA CHO WEBSOCKET
+                        .requestMatchers(
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**",
+                                "/swagger-ui.html"
+                        ).permitAll()
+                        .requestMatchers("/api/payment/vnpay/**").permitAll()
                         .anyRequest().authenticated() // Tất cả các API khác đều cần token
                 );
 
