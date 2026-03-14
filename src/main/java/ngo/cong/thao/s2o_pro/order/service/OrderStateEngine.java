@@ -15,19 +15,26 @@ public class OrderStateEngine {
     private static final Map<OrderStatus, Set<OrderStatus>> VALID_TRANSITIONS = new EnumMap<>(OrderStatus.class);
 
     static {
-        // Cấu hình quy tắc chuyển trạng thái tại 1 nơi duy nhất
-        VALID_TRANSITIONS.put(OrderStatus.NEW, Set.of(OrderStatus.CONFIRMED, OrderStatus.CANCELLED));
+        // --- THÊM DÒNG NÀY ĐỂ MỞ LUỒNG THANH TOÁN TRƯỚC ---
+        VALID_TRANSITIONS.put(OrderStatus.PENDING_PAYMENT, Set.of(OrderStatus.NEW, OrderStatus.CANCELLED));
+
+        // Mở thêm luồng cho đơn ăn tại bàn (DINE_IN) thanh toán ngay lúc mới quét mã tạo đơn
+        VALID_TRANSITIONS.put(OrderStatus.NEW, Set.of(OrderStatus.CONFIRMED, OrderStatus.CANCELLED, OrderStatus.PAID));
+
         VALID_TRANSITIONS.put(OrderStatus.CONFIRMED, Set.of(OrderStatus.COOKING, OrderStatus.PREPARING, OrderStatus.CANCELLED));
         VALID_TRANSITIONS.put(OrderStatus.COOKING, Set.of(OrderStatus.DONE));
         VALID_TRANSITIONS.put(OrderStatus.PREPARING, Set.of(OrderStatus.READY));
         VALID_TRANSITIONS.put(OrderStatus.READY, Set.of(OrderStatus.OUT_FOR_DELIVERY));
-        VALID_TRANSITIONS.put(OrderStatus.OUT_FOR_DELIVERY, Set.of(OrderStatus.DELIVERED));
-        // Đã sửa: Cho phép từ DONE quay lại COOKING (nếu khách gọi thêm món)
         VALID_TRANSITIONS.put(OrderStatus.DONE, Set.of(OrderStatus.PAID, OrderStatus.COOKING));
+        VALID_TRANSITIONS.put(OrderStatus.OUT_FOR_DELIVERY, Set.of(OrderStatus.DELIVERED));
         VALID_TRANSITIONS.put(OrderStatus.DELIVERED, Set.of(OrderStatus.PAID));
-
-        // PAID và CANCELLED là trạng thái cuối, không đi tiếp được
+// Khách có thể gọi tính tiền ngay khi vừa order (NEW), đang ăn (SERVED), hoặc ăn xong (DONE)
+        VALID_TRANSITIONS.put(OrderStatus.NEW, Set.of(OrderStatus.CONFIRMED, OrderStatus.CANCELLED, OrderStatus.PAID, OrderStatus.PAYMENT_REQUESTED));
+        VALID_TRANSITIONS.put(OrderStatus.SERVED, Set.of(OrderStatus.DONE, OrderStatus.PAYMENT_REQUESTED));
+        VALID_TRANSITIONS.put(OrderStatus.DONE, Set.of(OrderStatus.PAID, OrderStatus.COOKING, OrderStatus.PAYMENT_REQUESTED));
         VALID_TRANSITIONS.put(OrderStatus.PAID, Set.of());
+
+        VALID_TRANSITIONS.put(OrderStatus.PAYMENT_REQUESTED, Set.of(OrderStatus.PAID, OrderStatus.CANCELLED));
         VALID_TRANSITIONS.put(OrderStatus.CANCELLED, Set.of());
     }
 

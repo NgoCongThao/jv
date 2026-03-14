@@ -61,8 +61,13 @@ public class SecurityConfig {
                                 "/swagger-ui.html"
                         ).permitAll()
                         .requestMatchers("/api/payment/vnpay/**").permitAll()
+                        .requestMatchers("/api/menu/**").permitAll()   // Khách được xem Menu
+                        .requestMatchers("/api/orders/**").permitAll() // Khách được Đặt món và Gọi thanh toán
+                        .requestMatchers("/api/tables/**").permitAll() // Khách được xem thông tin Bàn
                         .anyRequest().authenticated() // Tất cả các API khác đều cần token
+
                 );
+
 
         http.authenticationProvider(authenticationProvider());
 

@@ -4,10 +4,8 @@ import lombok.RequiredArgsConstructor;
 import ngo.cong.thao.s2o_pro.menu.entity.MenuItem;
 import ngo.cong.thao.s2o_pro.menu.repository.MenuItemRepository;
 import ngo.cong.thao.s2o_pro.order.dto.OrderRequest;
-import ngo.cong.thao.s2o_pro.order.entity.Order;
-import ngo.cong.thao.s2o_pro.order.entity.OrderItem;
-import ngo.cong.thao.s2o_pro.order.entity.OrderStatus;
-import ngo.cong.thao.s2o_pro.order.entity.OrderType;
+import ngo.cong.thao.s2o_pro.order.dto.OrderResponse;
+import ngo.cong.thao.s2o_pro.order.entity.*;
 import ngo.cong.thao.s2o_pro.order.event.OrderPaidEvent;
 import ngo.cong.thao.s2o_pro.order.repository.OrderRepository;
 import ngo.cong.thao.s2o_pro.tenant.TenantContext;
@@ -70,7 +68,7 @@ public class OrderServiceImpl implements OrderService {
             // Đơn DELIVERY luôn tạo mới
             order = Order.builder()
                     .orderType(request.getOrderType())
-                    .status(OrderStatus.NEW)
+                    .status(OrderStatus.PENDING_PAYMENT)
                     .customerName(request.getCustomerName())
                     .customerPhone(request.getCustomerPhone())
                     .deliveryAddress(request.getDeliveryAddress())
@@ -106,36 +104,27 @@ public class OrderServiceImpl implements OrderService {
         order.setTotalAmount(currentTotal);
         Order savedOrder = orderRepository.save(order);
 
-        // 4. Bắn thông báo cho Bếp
-        String tableName = (request.getTableId() != null && !request.getTableId().isEmpty())
-                ? request.getTableId() : (request.getOrderType() == OrderType.DELIVERY ? "Giao hàng" : "Mang đi");
+        // 4. CHỈ bắn thông báo cho Bếp nếu đơn hàng là NEW (Ăn tại bàn).
+        // Nếu là giao hàng (PENDING_PAYMENT) thì im lặng, chờ thanh toán xong mới báo.
+        if (savedOrder.getStatus() == OrderStatus.NEW) {
+            String tableName = (request.getTableId() != null && !request.getTableId().isEmpty())
+                    ? request.getTableId() : "Giao hàng/Mang đi";
+            String notiMessage = isAddingToExisting
+                    ? "🔔 Bàn " + tableName + " VỪA GỌI THÊM MÓN!"
+                    : "🔔 Ting Ting! Bàn " + tableName + " vừa gọi món mới!";
+            notificationService.notifyKitchenNewOrder(savedOrder.getTenantId(), tableName, savedOrder.getId().toString());
+        }
 
-        String notiMessage = isAddingToExisting
-                ? "🔔 Bàn " + tableName + " VỪA GỌI THÊM MÓN!"
-                : "🔔 Ting Ting! Bàn " + tableName + " vừa gọi món mới!";
 
-        // Tùy biến xíu hàm notifyKitchen (Truyền thêm message) - Anh có thể cập nhật trong NotificationService nếu muốn
-        notificationService.notifyKitchenNewOrder(savedOrder.getTenantId(), tableName, savedOrder.getId().toString());
 
-        // 5. Nếu là Bill mới, chốt sổ cho Bàn thành "Có khách" (OCCUPIED) luôn cho chắc cú
+        // 5. Kích hoạt Event báo rằng có đơn hàng mới được tạo (để hệ thống tự đi khoá bàn)
         if (!isAddingToExisting && request.getOrderType() == OrderType.DINE_IN) {
-            try {
-                java.util.UUID tableUuid = java.util.UUID.fromString(request.getTableId());
-                ngo.cong.thao.s2o_pro.table.repository.DiningTableRepository tableRepo =
-                        org.springframework.web.context.support.WebApplicationContextUtils
-                                .getRequiredWebApplicationContext(
-                                        ((org.springframework.web.context.request.ServletRequestAttributes) org.springframework.web.context.request.RequestContextHolder.getRequestAttributes()).getRequest().getServletContext()
-                                ).getBean(ngo.cong.thao.s2o_pro.table.repository.DiningTableRepository.class);
-
-                tableRepo.findById(tableUuid).ifPresent(t -> {
-                    t.setStatus(ngo.cong.thao.s2o_pro.table.entity.DiningTable.TableStatus.OCCUPIED);
-                    tableRepo.save(t);
-                });
-            } catch (Exception ignored) {} // Bỏ qua lỗi ép kiểu
+            eventPublisher.publishEvent(new ngo.cong.thao.s2o_pro.order.event.OrderCreatedEvent(request.getTableId(), savedOrder.getTenantId()));
         }
 
         return savedOrder;
-    }
+    } // Hết hàm createOrder // Bỏ qua lỗi ép kiểu
+
 
     @Override
     @Transactional
@@ -157,7 +146,11 @@ public class OrderServiceImpl implements OrderService {
                     savedOrder.getTotalAmount(),
                     savedOrder.getTenantId(),
                     savedOrder.getTableId()
+
             ));
+            String tableName = (savedOrder.getTableId() != null && !savedOrder.getTableId().isEmpty())
+                    ? savedOrder.getTableId() : "Giao hàng/Mang đi";
+            notificationService.notifyOrderStatusChanged(savedOrder.getTenantId(), savedOrder.getId().toString(), "PAID", tableName);
         }else if (newStatus == OrderStatus.READY && savedOrder.getOrderType() == OrderType.DELIVERY) {
             // Bắn sự kiện: Bếp nấu xong đơn Giao hàng -> Tự động tạo Vận đơn
             eventPublisher.publishEvent(new ngo.cong.thao.s2o_pro.order.event.OrderReadyForDeliveryEvent(
@@ -167,19 +160,25 @@ public class OrderServiceImpl implements OrderService {
 
             // Vẫn giữ thông báo WebSocket cho Thu ngân biết để gọi Shipper
             notificationService.notifyOrderStatusChanged(savedOrder.getTenantId(), savedOrder.getId().toString(), "READY", "Giao hàng");
+
+    } else {
+        // --- XỬ LÝ ĐẶC BIỆT KHI ĐƠN ONLINE THANH TOÁN XONG (PENDING -> NEW) ---
+        if (newStatus == OrderStatus.NEW && savedOrder.getOrderType() == OrderType.DELIVERY) {
+            // Tiền đã vào tài khoản, bây giờ mới hú Bếp làm món!
+            notificationService.notifyKitchenNewOrder(savedOrder.getTenantId(), "Giao hàng Online", savedOrder.getId().toString());
         }
-        else {
-            // --- THÊM MỚI TẠI ĐÂY: Bắn thông báo Real-time cho Thu ngân/Phục vụ ---
-            String tableName = (savedOrder.getTableId() != null && !savedOrder.getTableId().isEmpty())
-                    ? savedOrder.getTableId()
-                    : "Giao hàng/Mang đi";
-            notificationService.notifyOrderStatusChanged(
-                    savedOrder.getTenantId(),
-                    savedOrder.getId().toString(),
-                    newStatus.name(),
-                    tableName
-            );
-        }
+
+        // Bắn thông báo Real-time cho Thu ngân/Phục vụ
+        String tableName = (savedOrder.getTableId() != null && !savedOrder.getTableId().isEmpty())
+                ? savedOrder.getTableId()
+                : "Giao hàng/Mang đi";
+        notificationService.notifyOrderStatusChanged(
+                savedOrder.getTenantId(),
+                savedOrder.getId().toString(),
+                newStatus.name(),
+                tableName
+        );
+    }
 
         return savedOrder;
     }
@@ -265,5 +264,22 @@ public class OrderServiceImpl implements OrderService {
                 .deliveryRevenue(deliveryRev != null ? deliveryRev : BigDecimal.ZERO)
                 .topSellingItems(topItems)
                 .build();
+    }
+    @Override
+    @Transactional
+    public ngo.cong.thao.s2o_pro.order.dto.OrderResponse callForPayment(UUID orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy đơn hàng"));
+
+        // ---> BỔ SUNG CHỐT CHẶN Ở ĐÂY: Chỉ cho phép đơn DINE_IN <---
+        if (order.getOrderType() != ngo.cong.thao.s2o_pro.order.entity.OrderType.DINE_IN) {
+            throw new IllegalArgumentException("Tính năng gọi thanh toán chỉ áp dụng cho đơn ăn tại bàn!");
+        }
+
+        // 1. Gọi hàm cập nhật trạng thái
+        Order updatedOrder = updateOrderStatus(orderId, OrderStatus.PAYMENT_REQUESTED);
+
+        // 2. Chuyển đổi từ Order sang OrderResponse
+        return ngo.cong.thao.s2o_pro.order.dto.OrderResponse.fromEntity(updatedOrder);
     }
 }

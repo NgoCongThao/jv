@@ -82,4 +82,11 @@ public class OrderController {
         ngo.cong.thao.s2o_pro.order.dto.DashboardSummaryResponse summary = orderService.getDashboardSummary(startDate, endDate);
         return ResponseEntity.ok(ApiResponse.success(summary));
     }
+    // API dành cho Khách hàng bấm nút "Gọi Thanh Toán" (Giao diện Khách)
+    @PostMapping("/{id}/call-payment")
+    public ResponseEntity<ApiResponse<OrderResponse>> callForPayment(@PathVariable UUID id) {
+
+        OrderResponse response = orderService.callForPayment(id);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
 }

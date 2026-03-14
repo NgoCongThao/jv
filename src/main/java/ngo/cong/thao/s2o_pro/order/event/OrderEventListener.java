@@ -47,4 +47,20 @@ public class OrderEventListener {
             }
         }
     }
+    @EventListener
+    @Transactional
+    public void handleOrderCreatedEvent(OrderCreatedEvent event) {
+        if (event.tableId() != null && !event.tableId().isEmpty()) {
+            try {
+                UUID tableUuid = UUID.fromString(event.tableId());
+                diningTableRepository.findById(tableUuid).ifPresent(table -> {
+                    table.setStatus(DiningTable.TableStatus.OCCUPIED);
+                    diningTableRepository.save(table);
+                    log.info("🔒 [EVENT] Đã tự động đổi trạng thái bàn [{}] thành OCCUPIED.", table.getTableName());
+                });
+            } catch (Exception e) {
+                log.warn("⚠️ Không thể cập nhật trạng thái OCCUPIED cho bàn: {}", event.tableId());
+            }
+        }
+    }
 }

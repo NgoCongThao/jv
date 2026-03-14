@@ -27,3 +27,8 @@ jwt:
 gemini:
   api:
     key: ${GEMINI_API_KEY:}
+vnpay:
+  tmn-code: BQZV6E3R
+  hash-secret: JG0QD4Y9IXN0XWAFWIWCXTOUJB96Y03B
+  pay-url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
+  return-url: http://localhost:8080/api/payment/vnpay/return

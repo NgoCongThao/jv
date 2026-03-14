@@ -19,6 +19,17 @@ public class PaymentController {
     private final OrderRepository orderRepository;
     private final ngo.cong.thao.s2o_pro.order.service.OrderService orderService;
 
+    @org.springframework.beans.factory.annotation.Value("${vnpay.tmn-code}")
+    private String vnp_TmnCode;
+
+    @org.springframework.beans.factory.annotation.Value("${vnpay.hash-secret}")
+    private String vnp_HashSecret;
+
+    @org.springframework.beans.factory.annotation.Value("${vnpay.pay-url}")
+    private String vnp_PayUrl;
+
+    @org.springframework.beans.factory.annotation.Value("${vnpay.return-url}")
+    private String vnp_ReturnUrl;
     // ĐÃ FIX: Thêm tham số orderService vào trong ngoặc
     public PaymentController(OrderRepository orderRepository, ngo.cong.thao.s2o_pro.order.service.OrderService orderService) {
         this.orderRepository = orderRepository;
@@ -32,10 +43,7 @@ public class PaymentController {
         // ==========================================
         // 1. HARDCODE TRỰC TIẾP ĐỂ TRÁNH LỖI FILE YML
         // ==========================================
-        String vnp_TmnCode = "BQZV6E3R";
-        String vnp_HashSecret = "JG0QD4Y9IXN0XWAFWIWCXTOUJB96Y03B";
-        String vnp_PayUrl = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
-        String vnp_ReturnUrl = "http://localhost:8080/api/payment/vnpay/return";
+
 
         long amount = order.getTotalAmount().longValue() * 100;
 
@@ -106,39 +114,43 @@ public class PaymentController {
         return ResponseEntity.ok(ApiResponse.success(paymentUrl));
     }
     @GetMapping("/vnpay/return")
-    public ResponseEntity<String> vnpayReturn(jakarta.servlet.http.HttpServletRequest request) {
+    public ResponseEntity<Void> vnpayReturn(jakarta.servlet.http.HttpServletRequest request) {
         String responseCode = request.getParameter("vnp_ResponseCode");
         String txnRef = request.getParameter("vnp_TxnRef");
 
-        // Mã "00" của VNPay nghĩa là Giao dịch Thành công
+        // ĐỊA CHỈ TRANG WEB CỦA ANH (SAU NÀY LÀM FRONTEND SẼ TRỎ VỀ ĐÂY)
+        // Hiện tại để test, mình sẽ chuyển tạm nó về 1 link ảo trên localhost
+        String FRONTEND_SUCCESS_URL = "http://localhost:3000/order-success";
+        String FRONTEND_FAIL_URL = "http://localhost:3000/order-fail";
+
         if ("00".equals(responseCode)) {
             try {
-                // Lúc gửi đi mình đã xóa dấu gạch ngang (hyphen) của UUID, giờ phải nối nó lại
-                String uuidStr = txnRef.replaceFirst(
-                        "(\\w{8})(\\w{4})(\\w{4})(\\w{4})(\\w{12})", "$1-$2-$3-$4-$5");
+                String uuidStr = txnRef.replaceFirst("(\\w{8})(\\w{4})(\\w{4})(\\w{4})(\\w{12})", "$1-$2-$3-$4-$5");
                 UUID orderId = UUID.fromString(uuidStr);
 
-                // MA THUẬT NẰM Ở ĐÂY: Cập nhật đơn hàng thành PAID
-                // Lập tức Event-Driven sẽ kích hoạt Robot đi dọn bàn (chuyển bàn về AVAILABLE)
-                orderService.updateOrderStatus(orderId, ngo.cong.thao.s2o_pro.order.entity.OrderStatus.PAID);
+                Order order = orderRepository.findById(orderId)
+                        .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy đơn hàng"));
 
-                return ResponseEntity.ok(
-                        "<div style='text-align:center; margin-top:50px; font-family: Arial;'>" +
-                                "<h1 style='color: green;'>✅ GIAO DỊCH THÀNH CÔNG!</h1>" +
-                                "<h3>Đơn hàng của bạn đã được thanh toán. Bàn đã được dọn tự động!</h3>" +
-                                "<p>Mã đơn: " + orderId + "</p>" +
-                                "</div>"
-                );
+                if (order.getStatus() == ngo.cong.thao.s2o_pro.order.entity.OrderStatus.PENDING_PAYMENT) {
+                    orderService.updateOrderStatus(orderId, ngo.cong.thao.s2o_pro.order.entity.OrderStatus.NEW);
+                } else {
+                    orderService.updateOrderStatus(orderId, ngo.cong.thao.s2o_pro.order.entity.OrderStatus.PAID);
+                }
+
+                // 🌟 THAY VÌ TRẢ VỀ HTML -> CHUYỂN HƯỚNG BẮT TRÌNH DUYỆT NHẢY VỀ FRONTEND
+                return ResponseEntity.status(org.springframework.http.HttpStatus.FOUND)
+                        .location(java.net.URI.create(FRONTEND_SUCCESS_URL + "?orderId=" + orderId))
+                        .build();
+
             } catch (Exception e) {
-                return ResponseEntity.ok("<h1>GIAO DỊCH THÀNH CÔNG!</h1><p>Nhưng có lỗi khi cập nhật vào hệ thống: " + e.getMessage() + "</p>");
+                return ResponseEntity.status(org.springframework.http.HttpStatus.FOUND)
+                        .location(java.net.URI.create(FRONTEND_FAIL_URL + "?error=" + e.getMessage()))
+                        .build();
             }
         } else {
-            return ResponseEntity.status(400).body(
-                    "<div style='text-align:center; margin-top:50px; font-family: Arial;'>" +
-                            "<h1 style='color: red;'>❌ GIAO DỊCH THẤT BẠI!</h1>" +
-                            "<p>Mã lỗi từ VNPay: " + responseCode + "</p>" +
-                            "</div>"
-            );
+            return ResponseEntity.status(org.springframework.http.HttpStatus.FOUND)
+                    .location(java.net.URI.create(FRONTEND_FAIL_URL + "?vnp_ResponseCode=" + responseCode))
+                    .build();
         }
     }
 }

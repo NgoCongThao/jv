@@ -13,6 +13,7 @@ import java.util.UUID;
 @Repository
 public interface OrderRepository extends JpaRepository<Order, UUID> {
 
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"items", "items.menuItem"})
     // THÊM DÒNG NÀY: Tìm các đơn hàng nằm trong danh sách trạng thái, sắp xếp theo thời gian tạo cũ nhất lên đầu (để bếp làm trước)
     Page<Order> findAllByStatusInOrderByCreatedAtAsc(List<OrderStatus> statuses, Pageable pageable);
     // Tính tổng số đơn hàng theo trạng thái và khoảng thời gian
@@ -45,6 +46,7 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     );
     // Tìm đơn hàng đang hoạt động (Chưa PAID, chưa CANCELLED) của một bàn cụ thể
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @org.springframework.data.jpa.repository.Query("SELECT o FROM Order o WHERE o.tableId = :tableId AND o.status NOT IN ('PAID', 'CANCELLED')")
     java.util.Optional<ngo.cong.thao.s2o_pro.order.entity.Order> findActiveOrderByTableId(@org.springframework.data.repository.query.Param("tableId") String tableId);
 }

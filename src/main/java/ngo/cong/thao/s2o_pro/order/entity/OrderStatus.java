@@ -1,15 +1,17 @@
 package ngo.cong.thao.s2o_pro.order.entity;
 
 public enum OrderStatus {
-    NEW,                // Vừa tạo
-    CONFIRMED,          // Đã xác nhận
-    COOKING,            // Đang nấu (DINE_IN)
-    PREPARING,          // Đang chuẩn bị (DELIVERY)
-    READY,              // Chuẩn bị xong (DELIVERY)
-    DONE,               // Đã lên món (DINE_IN)
-    OUT_FOR_DELIVERY,   // Đang giao (DELIVERY)
-    DELIVERED,          // Đã giao tới (DELIVERY)
-    PAID,
-    PENDING_PAYMENT,// Đã thanh toán (Hoàn thành)
-    CANCELLED           // Hủy đơn
+    PENDING_PAYMENT, // Chờ thanh toán online (Delivery)
+    NEW,             // Đơn mới
+    CONFIRMED,       // Đã xác nhận
+    COOKING,         // Đang nấu
+    PREPARING,       // Đang chuẩn bị (đồ uống)
+    READY,           // Chờ phục vụ / Chờ giao
+    SERVED,          // Đã phục vụ tại bàn
+    OUT_FOR_DELIVERY,// Đang giao hàng
+    DELIVERED,       // Đã giao thành công
+    DONE,            // Khách đã dùng xong
+    PAYMENT_REQUESTED, // ---> THÊM MỚI: Khách đang gọi tính tiền
+    PAID,            // Đã thanh toán
+    CANCELLED        // Đã hủy
 }
