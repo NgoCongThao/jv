@@ -53,10 +53,13 @@ public class BotFaqServiceImpl implements BotFaqService {
             // ==========================================
             // KỊCH BẢN 1: KHÁCH ĐANG Ở TRANG CHỦ HỆ THỐNG
             // ==========================================
+            // ==========================================
+            // KỊCH BẢN 1: KHÁCH ĐANG Ở TRANG CHỦ HỆ THỐNG
+            // ==========================================
             if (currentTenantId == null) {
-                // Lấy danh sách tất cả các nhà hàng đang hoạt động trên nền tảng
-                List<ngo.cong.thao.s2o_pro.tenant.entity.Tenant> tenants = tenantRepository.findAll().stream()
-                        .filter(ngo.cong.thao.s2o_pro.tenant.entity.Tenant::isActive)
+                // Đã sửa: Trỏ đúng về user.entity.Tenant và lọc theo status ACTIVE thay vì isActive()
+                List<ngo.cong.thao.s2o_pro.user.entity.Tenant> tenants = tenantRepository.findAll().stream()
+                        .filter(t -> t.getStatus() != null && "ACTIVE".equals(t.getStatus().name()))
                         .toList();
 
                 String restaurantList = tenants.stream()

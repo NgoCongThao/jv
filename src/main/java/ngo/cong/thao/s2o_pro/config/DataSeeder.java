@@ -4,7 +4,8 @@ import ngo.cong.thao.s2o_pro.menu.entity.MenuCategory;
 import ngo.cong.thao.s2o_pro.menu.entity.MenuItem;
 import ngo.cong.thao.s2o_pro.menu.repository.MenuCategoryRepository;
 import ngo.cong.thao.s2o_pro.menu.repository.MenuItemRepository;
-import ngo.cong.thao.s2o_pro.tenant.entity.Tenant;
+import ngo.cong.thao.s2o_pro.user.entity.Tenant;
+import ngo.cong.thao.s2o_pro.tenant.entity.TenantStatus;
 import ngo.cong.thao.s2o_pro.tenant.repository.TenantRepository;
 import ngo.cong.thao.s2o_pro.user.entity.Role;
 import ngo.cong.thao.s2o_pro.user.entity.User;
@@ -62,7 +63,7 @@ public class DataSeeder implements CommandLineRunner {
                     .domain("biendong")
                     .address("Quận 1, TP.HCM")
                     .phone("0901111111")
-                    .isActive(true)
+                    .status(ngo.cong.thao.s2o_pro.tenant.entity.TenantStatus.ACTIVE) // THAY ĐỔI Ở ĐÂY
                     .build());
 
             userRepository.save(User.builder()
@@ -93,7 +94,7 @@ public class DataSeeder implements CommandLineRunner {
                     .domain("katinat")
                     .address("Quận 3, TP.HCM")
                     .phone("0902222222")
-                    .isActive(true)
+                    .status(ngo.cong.thao.s2o_pro.tenant.entity.TenantStatus.ACTIVE)
                     .build());
 
             userRepository.save(User.builder()
@@ -123,7 +124,7 @@ public class DataSeeder implements CommandLineRunner {
                     .domain("gogi")
                     .address("Quận 10, TP.HCM")
                     .phone("0903333333")
-                    .isActive(true)
+                    .status(ngo.cong.thao.s2o_pro.tenant.entity.TenantStatus.ACTIVE)
                     .build());
 
             userRepository.save(User.builder()

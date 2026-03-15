@@ -1,10 +1,9 @@
-package ngo.cong.thao.s2o_pro.tenant.entity;
+package ngo.cong.thao.s2o_pro.user.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.*;
 import ngo.cong.thao.s2o_pro.common.entity.BaseEntity;
+import ngo.cong.thao.s2o_pro.tenant.entity.TenantStatus;
 
 @Entity
 @Table(name = "tenants")
@@ -24,8 +23,11 @@ public class Tenant extends BaseEntity {
     private String address;
 
     private String phone;
+    @Column(name = "owner_email")
+    private String ownerEmail;
 
-    @Column(name = "is_active")
-    @Builder.Default
-    private boolean isActive = true;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
+    private TenantStatus status;
+
 }

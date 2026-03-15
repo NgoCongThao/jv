@@ -25,7 +25,7 @@ public class RecommendationController {
 
     // API Gợi ý món ăn theo giờ hiện tại
     @GetMapping("/time-based")
-    @PreAuthorize("hasAnyRole('RESTAURANT_OWNER', 'CUSTOMER', 'GUEST')")
+    @PreAuthorize("hasAnyRole('OWNER', 'CUSTOMER', 'GUEST')")
     public ResponseEntity<ApiResponse<List<MenuItemResponse>>> getRecommendations() {
         List<MenuItem> items = recommendationService.getRecommendationsByTime();
 

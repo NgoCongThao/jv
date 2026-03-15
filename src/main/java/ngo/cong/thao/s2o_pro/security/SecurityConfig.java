@@ -60,6 +60,7 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/swagger-ui.html"
                         ).permitAll()
+                        .requestMatchers("/api/tenants/register").permitAll() // Mở cửa cho chủ quán đăng ký SaaS
                         .requestMatchers("/api/payment/vnpay/**").permitAll()
                         .requestMatchers("/api/menu/**").permitAll()   // Khách được xem Menu
                         .requestMatchers("/api/orders/**").permitAll() // Khách được Đặt món và Gọi thanh toán
