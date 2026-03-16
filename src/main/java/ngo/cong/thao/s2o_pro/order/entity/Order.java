@@ -43,6 +43,9 @@ public class Order extends TenantAwareEntity {
     @Column(name = "customer_phone")
     private String customerPhone;
 
+    @Column(name = "customer_id")
+    private java.util.UUID customerId;
+
     @Column(name = "delivery_address")
     private String deliveryAddress;
 
@@ -59,9 +62,16 @@ public class Order extends TenantAwareEntity {
 
     @Column(name = "change_amount")
     private java.math.BigDecimal changeAmount; // Tiền trả lại
+    @Column(name = "points_used")
+    @Builder.Default
+    private Integer pointsUsed = 0; // Số điểm khách đã xài cho đơn này
 
+    @Column(name = "discount_amount")
+    @Builder.Default
+    private java.math.BigDecimal discountAmount = java.math.BigDecimal.ZERO; // Số tiền được giảm tương ứng
     // Liên kết với chi tiết đơn hàng (1 đơn có nhiều món)
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<OrderItem> items = new ArrayList<>();
+
 }

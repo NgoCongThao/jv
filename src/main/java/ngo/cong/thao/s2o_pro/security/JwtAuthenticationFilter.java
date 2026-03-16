@@ -21,7 +21,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtUtils jwtUtils;
     private final TokenBlacklistService tokenBlacklistService;
 
-    // SỬA LỖI: Đã thêm TokenBlacklistService vào constructor
     public JwtAuthenticationFilter(JwtUtils jwtUtils, TokenBlacklistService tokenBlacklistService) {
         this.jwtUtils = jwtUtils;
         this.tokenBlacklistService = tokenBlacklistService;
@@ -32,43 +31,51 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         try {
+            // LẤY SẴN TENANT ID TỪ HEADER (Phục vụ cho Khách nền tảng và Khách vãng lai)
+            String tenantIdFromHeader = request.getHeader("X-Tenant-ID");
+
             String jwt = parseJwt(request);
 
-            // 1. Kiểm tra token có hợp lệ về chữ ký và thời gian không
+            // NẾU CÓ TOKEN (Đăng nhập bằng tài khoản)
             if (jwt != null && jwtUtils.validateToken(jwt)) {
 
-                // --- 2. CHỐT CHẶN REDIS BLACKLIST CỰC KỲ QUAN TRỌNG ---
+                // Chốt chặn Blacklist
                 if (tokenBlacklistService.isBlacklisted(jwt)) {
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     response.setContentType("application/json;charset=UTF-8");
-                    response.getWriter().write("{\"status\": 401, \"message\": \"Token đã bị thu hồi do người dùng đăng xuất.\"}");
-                    return; // Ngắt luồng ngay lập tức, hất văng request ra ngoài
+                    response.getWriter().write("{\"status\": 401, \"message\": \"Token đã bị thu hồi.\"}");
+                    return;
                 }
-                // --------------------------------------------------------
 
-                // 3. Nếu token an toàn, tiến hành trích xuất dữ liệu
                 Claims claims = jwtUtils.getClaimsFromToken(jwt);
-
                 String username = claims.getSubject();
                 String role = claims.get("role", String.class);
-                String tenantId = claims.get("tenantId", String.class);
+                String tenantIdFromJwt = claims.get("tenantId", String.class);
 
-                // Lưu quyền vào Spring Security Context
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                         username, null, Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role)));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
 
-                // Bơm tenant_id vào TenantContext
-                TenantContext.setTenantId(tenantId);
+                // ---> ĐÂY LÀ ĐOẠN MA THUẬT QUYẾT ĐỊNH <---
+                // Ưu tiên TenantId từ JWT (Nhân viên/Chủ quán).
+                // Nếu JWT không có (Khách App S2O), thì lấy từ Header truyền lên.
+                String finalTenantId = (tenantIdFromJwt != null) ? tenantIdFromJwt : tenantIdFromHeader;
+                TenantContext.setTenantId(finalTenantId);
+
+            } else {
+                // NẾU KHÔNG CÓ TOKEN (Khách vãng lai - GUEST quét QR)
+                // Vẫn phải nạp TenantId từ Header vào Context để họ xem Menu và Đặt món được
+                if (tenantIdFromHeader != null) {
+                    TenantContext.setTenantId(tenantIdFromHeader);
+                }
             }
 
             filterChain.doFilter(request, response);
 
         } catch (Exception e) {
-            // Có thể thêm log lỗi ở đây nếu cần thiết
             logger.error("Không thể thiết lập xác thực người dùng: {}", e);
         } finally {
-            // Bắt buộc phải dọn dẹp sau khi request xử lý xong để tránh rò rỉ dữ liệu giữa các luồng
+            // Bắt buộc dọn dẹp để tránh rò rỉ dữ liệu
             TenantContext.clear();
         }
     }

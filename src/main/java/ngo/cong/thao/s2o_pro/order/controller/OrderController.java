@@ -7,10 +7,11 @@ import ngo.cong.thao.s2o_pro.order.dto.OrderResponse;
 import ngo.cong.thao.s2o_pro.order.entity.Order;
 import ngo.cong.thao.s2o_pro.order.entity.OrderStatus;
 import ngo.cong.thao.s2o_pro.order.service.OrderService;
+import ngo.cong.thao.s2o_pro.user.repository.UserRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
+import ngo.cong.thao.s2o_pro.order.repository.OrderRepository;
 import java.util.UUID;
 
 @RestController
@@ -18,6 +19,16 @@ import java.util.UUID;
 public class OrderController {
 
     private final OrderService orderService;
+    // Thay vì dùng private final, anh đổi thành thế này để Spring tự động tiêm vào:
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private ngo.cong.thao.s2o_pro.user.repository.UserRepository userRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private ngo.cong.thao.s2o_pro.user.repository.CustomerMembershipRepository membershipRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private OrderRepository orderRepository;
 
     public OrderController(OrderService orderService) {
         this.orderService = orderService;
@@ -88,5 +99,35 @@ public class OrderController {
 
         OrderResponse response = orderService.callForPayment(id);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    // Lấy lịch sử mua hàng và điểm số của khách
+    @GetMapping("/my-history")
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('CUSTOMER')")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Object>>> getMyHistory() {
+        String phone = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+
+        // 1. Lấy thông tin User để biết ID
+        userRepository.findByUsername(phone).ifPresent(user -> {
+            // 2. Lấy Ví điểm của nhà hàng hiện tại (Truyền X-Tenant-ID trên Header)
+            String currentTenant = ngo.cong.thao.s2o_pro.tenant.TenantContext.getTenantId();
+            if (currentTenant != null) {
+                membershipRepository.findByCustomerIdAndTenantId(user.getId(), currentTenant)
+                        .ifPresent(mem -> result.put("myPointsHere", mem.getPoints()));
+            }
+
+            // 3. Lấy lịch sử đơn hàng tại nhà hàng này
+            java.util.List<OrderResponse> myOrders = orderRepository.findAll().stream()
+                    .filter(o -> user.getId().equals(o.getCustomerId()))
+                    .sorted(java.util.Comparator.comparing(ngo.cong.thao.s2o_pro.order.entity.Order::getCreatedAt).reversed())
+                    .map(OrderResponse::fromEntity)
+                    .toList();
+
+            result.put("orders", myOrders);
+        });
+
+        return ResponseEntity.ok(ApiResponse.success(result));
     }
 }

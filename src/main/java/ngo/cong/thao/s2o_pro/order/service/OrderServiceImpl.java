@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+@lombok.extern.slf4j.Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderServiceImpl implements OrderService {
@@ -25,13 +26,41 @@ public class OrderServiceImpl implements OrderService {
     private final OrderStateEngine stateEngine;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
-    // THÊM: Inject NotificationService để bắn thông báo Real-time
+    private final ngo.cong.thao.s2o_pro.user.repository.CustomerMembershipRepository membershipRepository;
+    // ĐÃ FIX: Bổ sung UserRepository bị thiếu
+    private final ngo.cong.thao.s2o_pro.user.repository.UserRepository userRepository;
+
     private final NotificationService notificationService;
 
     @Override
     @Transactional
     public Order createOrder(OrderRequest request) {
-        // 1. Validate cơ bản
+
+        java.util.UUID loggedInCustomerId = null;
+        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+
+        // Bỏ check instanceof UserDetails, chỉ cần check đã login và không phải khách vãng lai
+        if (auth != null && auth.isAuthenticated() && !auth.getPrincipal().equals("anonymousUser")) {
+            String phone = auth.getName(); // Lấy đúng số điện thoại từ Token
+            java.util.Optional<ngo.cong.thao.s2o_pro.user.entity.User> userOpt = userRepository.findByUsername(phone);
+
+            if (userOpt.isPresent()) {
+                ngo.cong.thao.s2o_pro.user.entity.User u = userOpt.get();
+                loggedInCustomerId = u.getId();
+
+                // NẾU KHÁCH LẦN ĐẦU TỚI QUÁN -> PHÁT THẺ THÀNH VIÊN VÍ RỖNG CỦA QUÁN NÀY
+                String currentTenant = ngo.cong.thao.s2o_pro.tenant.TenantContext.getTenantId();
+                if (currentTenant != null && membershipRepository.findByCustomerIdAndTenantId(u.getId(), currentTenant).isEmpty()) {
+                    membershipRepository.save(ngo.cong.thao.s2o_pro.user.entity.CustomerMembership.builder()
+                            .customerId(u.getId())
+                            .tenantId(currentTenant)
+                            .points(0)
+                            .totalSpent(java.math.BigDecimal.ZERO)
+                            .build());
+                }
+            }
+        }
+        // 2. Validate cơ bản
         if (request.getOrderType() == OrderType.DINE_IN && (request.getTableId() == null || request.getTableId().isEmpty())) {
             throw new IllegalArgumentException("Đơn dùng tại quán bắt buộc phải có ID Bàn (tableId)");
         }
@@ -39,46 +68,45 @@ public class OrderServiceImpl implements OrderService {
             throw new IllegalArgumentException("Đơn giao hàng bắt buộc phải có Địa chỉ (deliveryAddress)");
         }
 
-        Order order;
+        Order order = new Order();
         boolean isAddingToExisting = false;
 
-        // 2. Logic GỘP BILL cho khách ăn tại bàn (DINE_IN)
+        // 3. Logic GỘP BILL cho khách ăn tại bàn (DINE_IN)
         if (request.getOrderType() == OrderType.DINE_IN) {
             java.util.Optional<Order> activeOrderOpt = orderRepository.findActiveOrderByTableId(request.getTableId());
 
             if (activeOrderOpt.isPresent()) {
-                order = activeOrderOpt.get();
+                Order existingOrder = activeOrderOpt.get();
+                order = existingOrder;
                 isAddingToExisting = true;
 
-                // Nếu bếp đã làm xong hết món cũ (DONE), giờ có món mới -> Bật lại trạng thái COOKING
                 if (order.getStatus() == OrderStatus.DONE) {
                     order.setStatus(OrderStatus.COOKING);
                 }
             } else {
-                // Bàn trống, tạo Bill mới
-                order = Order.builder()
-                        .orderType(request.getOrderType())
-                        .status(OrderStatus.NEW)
-                        .tableId(request.getTableId())
-                        .totalAmount(BigDecimal.ZERO)
-                        .build();
+                order.setOrderType(request.getOrderType());
+                order.setStatus(OrderStatus.NEW);
+                order.setTableId(request.getTableId());
+                order.setTotalAmount(BigDecimal.ZERO);
                 order.setTenantId(TenantContext.getTenantId());
             }
         } else {
-            // Đơn DELIVERY luôn tạo mới
-            order = Order.builder()
-                    .orderType(request.getOrderType())
-                    .status(OrderStatus.PENDING_PAYMENT)
-                    .customerName(request.getCustomerName())
-                    .customerPhone(request.getCustomerPhone())
-                    .deliveryAddress(request.getDeliveryAddress())
-                    .deliveryNotes(request.getDeliveryNotes())
-                    .totalAmount(BigDecimal.ZERO)
-                    .build();
+            order.setOrderType(request.getOrderType());
+            order.setStatus(OrderStatus.PENDING_PAYMENT);
+            order.setCustomerName(request.getCustomerName());
+            order.setCustomerPhone(request.getCustomerPhone());
+            order.setDeliveryAddress(request.getDeliveryAddress());
+            order.setDeliveryNotes(request.getDeliveryNotes());
+            order.setTotalAmount(BigDecimal.ZERO);
             order.setTenantId(TenantContext.getTenantId());
         }
 
-        // 3. Quét danh sách món gọi thêm / gọi mới
+        // ---> GẮN ID KHÁCH HÀNG VÀO ĐƠN SAU KHI ĐÃ XỬ LÝ XONG <---
+        if (loggedInCustomerId != null) {
+            order.setCustomerId(loggedInCustomerId);
+        }
+
+        // 4. Quét danh sách món gọi thêm / gọi mới
         BigDecimal currentTotal = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
 
         for (var itemReq : request.getItems()) {
@@ -95,8 +123,6 @@ public class OrderServiceImpl implements OrderService {
             orderItem.setTenantId(TenantContext.getTenantId());
 
             order.getItems().add(orderItem);
-
-            // Cộng dồn tiền vào Bill
             BigDecimal itemTotal = menuItem.getPrice().multiply(BigDecimal.valueOf(itemReq.getQuantity()));
             currentTotal = currentTotal.add(itemTotal);
         }
@@ -104,26 +130,20 @@ public class OrderServiceImpl implements OrderService {
         order.setTotalAmount(currentTotal);
         Order savedOrder = orderRepository.save(order);
 
-        // 4. CHỈ bắn thông báo cho Bếp nếu đơn hàng là NEW (Ăn tại bàn).
-        // Nếu là giao hàng (PENDING_PAYMENT) thì im lặng, chờ thanh toán xong mới báo.
+        // 5. Bắn thông báo cho Bếp
         if (savedOrder.getStatus() == OrderStatus.NEW) {
             String tableName = (request.getTableId() != null && !request.getTableId().isEmpty())
                     ? request.getTableId() : "Giao hàng/Mang đi";
-            String notiMessage = isAddingToExisting
-                    ? "🔔 Bàn " + tableName + " VỪA GỌI THÊM MÓN!"
-                    : "🔔 Ting Ting! Bàn " + tableName + " vừa gọi món mới!";
             notificationService.notifyKitchenNewOrder(savedOrder.getTenantId(), tableName, savedOrder.getId().toString());
         }
 
-
-
-        // 5. Kích hoạt Event báo rằng có đơn hàng mới được tạo (để hệ thống tự đi khoá bàn)
+        // 6. Khoá bàn
         if (!isAddingToExisting && request.getOrderType() == OrderType.DINE_IN) {
             eventPublisher.publishEvent(new ngo.cong.thao.s2o_pro.order.event.OrderCreatedEvent(request.getTableId(), savedOrder.getTenantId()));
         }
 
         return savedOrder;
-    } // Hết hàm createOrder // Bỏ qua lỗi ép kiểu
+    }
 
 
     @Override
@@ -132,60 +152,48 @@ public class OrderServiceImpl implements OrderService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy đơn hàng"));
 
-        // 1. Dùng State Engine để kiểm tra logic
         stateEngine.validateTransition(order.getStatus(), newStatus, order.getOrderType());
 
-        // 2. Lưu trạng thái mới
         order.setStatus(newStatus);
         Order savedOrder = orderRepository.save(order);
 
-        // 3. Nếu khách thanh toán xong -> Bắn pháo hoa (Event)
         if (newStatus == OrderStatus.PAID) {
-            eventPublisher.publishEvent(new OrderPaidEvent(
-                    savedOrder.getId(),
-                    savedOrder.getTotalAmount(),
-                    savedOrder.getTenantId(),
-                    savedOrder.getTableId()
+            eventPublisher.publishEvent(new OrderPaidEvent(savedOrder.getId(), savedOrder.getTotalAmount(), savedOrder.getTenantId(), savedOrder.getTableId()));
 
-            ));
-            String tableName = (savedOrder.getTableId() != null && !savedOrder.getTableId().isEmpty())
-                    ? savedOrder.getTableId() : "Giao hàng/Mang đi";
+            String tableName = (savedOrder.getTableId() != null && !savedOrder.getTableId().isEmpty()) ? savedOrder.getTableId() : "Giao hàng/Mang đi";
             notificationService.notifyOrderStatusChanged(savedOrder.getTenantId(), savedOrder.getId().toString(), "PAID", tableName);
-        }else if (newStatus == OrderStatus.READY && savedOrder.getOrderType() == OrderType.DELIVERY) {
-            // Bắn sự kiện: Bếp nấu xong đơn Giao hàng -> Tự động tạo Vận đơn
-            eventPublisher.publishEvent(new ngo.cong.thao.s2o_pro.order.event.OrderReadyForDeliveryEvent(
-                    savedOrder.getId(),
-                    savedOrder.getTenantId()
-            ));
 
-            // Vẫn giữ thông báo WebSocket cho Thu ngân biết để gọi Shipper
+            // ĐÃ FIX: Di chuyển TÍCH ĐIỂM vào đúng chỗ khi ĐÃ THANH TOÁN (PAID)
+            if (savedOrder.getCustomerId() != null) {
+                membershipRepository.findByCustomerIdAndTenantId(savedOrder.getCustomerId(), savedOrder.getTenantId())
+                        .ifPresent(membership -> {
+                            int pointsEarned = savedOrder.getTotalAmount().intValue() / 10000;
+                            membership.setPoints(membership.getPoints() + pointsEarned);
+                            membership.setTotalSpent(membership.getTotalSpent().add(savedOrder.getTotalAmount()));
+                            membershipRepository.save(membership);
+                            log.info("🎁 Khách {} đã được cộng {} điểm vào ví của nhà hàng {}", savedOrder.getCustomerName(), pointsEarned, savedOrder.getTenantId());
+                        });
+            }
+
+        } else if (newStatus == OrderStatus.READY && savedOrder.getOrderType() == OrderType.DELIVERY) {
+            eventPublisher.publishEvent(new ngo.cong.thao.s2o_pro.order.event.OrderReadyForDeliveryEvent(savedOrder.getId(), savedOrder.getTenantId()));
             notificationService.notifyOrderStatusChanged(savedOrder.getTenantId(), savedOrder.getId().toString(), "READY", "Giao hàng");
 
-    } else {
-        // --- XỬ LÝ ĐẶC BIỆT KHI ĐƠN ONLINE THANH TOÁN XONG (PENDING -> NEW) ---
-        if (newStatus == OrderStatus.NEW && savedOrder.getOrderType() == OrderType.DELIVERY) {
-            // Tiền đã vào tài khoản, bây giờ mới hú Bếp làm món!
-            notificationService.notifyKitchenNewOrder(savedOrder.getTenantId(), "Giao hàng Online", savedOrder.getId().toString());
-        }
+        } else {
+            if (newStatus == OrderStatus.NEW && savedOrder.getOrderType() == OrderType.DELIVERY) {
+                notificationService.notifyKitchenNewOrder(savedOrder.getTenantId(), "Giao hàng Online", savedOrder.getId().toString());
+            }
 
-        // Bắn thông báo Real-time cho Thu ngân/Phục vụ
-        String tableName = (savedOrder.getTableId() != null && !savedOrder.getTableId().isEmpty())
-                ? savedOrder.getTableId()
-                : "Giao hàng/Mang đi";
-        notificationService.notifyOrderStatusChanged(
-                savedOrder.getTenantId(),
-                savedOrder.getId().toString(),
-                newStatus.name(),
-                tableName
-        );
-    }
+            String tableName = (savedOrder.getTableId() != null && !savedOrder.getTableId().isEmpty()) ? savedOrder.getTableId() : "Giao hàng/Mang đi";
+            notificationService.notifyOrderStatusChanged(savedOrder.getTenantId(), savedOrder.getId().toString(), newStatus.name(), tableName);
+        }
 
         return savedOrder;
     }
+
     @Override
     @Transactional(readOnly = true)
     public org.springframework.data.domain.Page<Order> getOrdersByStatuses(java.util.List<OrderStatus> statuses, org.springframework.data.domain.Pageable pageable) {
-        // Nếu không truyền status nào thì lấy tất cả
         if (statuses == null || statuses.isEmpty()) {
             return orderRepository.findAll(pageable);
         }
@@ -197,24 +205,62 @@ public class OrderServiceImpl implements OrderService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy đơn hàng"));
 
-        // 1. Dùng State Engine kiểm tra xem đơn này có được phép thanh toán không (Phải đang DONE hoặc DELIVERED)
         stateEngine.validateTransition(order.getStatus(), OrderStatus.PAID, order.getOrderType());
 
-        // 2. Tính toán tiền thừa nếu thanh toán bằng Tiền mặt
+        BigDecimal finalTotal = order.getTotalAmount();
+        Integer pointsToUse = request.getPointsToUse() != null ? request.getPointsToUse() : 0;
+        BigDecimal discountAmount = BigDecimal.ZERO;
+
+        // 1. LOGIC XÀI ĐIỂM ĐỔI TIỀN (BURNING POINTS)
+        if (pointsToUse > 0) {
+            if (order.getCustomerId() == null) {
+                throw new IllegalArgumentException("Đơn này là của khách vãng lai, không thể dùng điểm!");
+            }
+
+            ngo.cong.thao.s2o_pro.user.entity.CustomerMembership membership = membershipRepository
+                    .findByCustomerIdAndTenantId(order.getCustomerId(), order.getTenantId())
+                    .orElseThrow(() -> new IllegalArgumentException("Khách chưa có thẻ thành viên tại quán này!"));
+
+            if (membership.getPoints() < pointsToUse) {
+                throw new IllegalArgumentException("Không đủ điểm! Ví của khách chỉ có " + membership.getPoints() + " điểm.");
+            }
+
+            // TỶ LỆ QUY ĐỔI: Quán tự cấu hình (Tạm fix 1 Điểm = 1.000 VNĐ)
+            BigDecimal pointValue = new BigDecimal("1000");
+            discountAmount = pointValue.multiply(new BigDecimal(pointsToUse));
+
+            // Chống lỗi "Giảm giá lố tiền Bill"
+            if (discountAmount.compareTo(finalTotal) > 0) {
+                discountAmount = finalTotal;
+                // Tính lại số điểm thực tế bị trừ
+                pointsToUse = finalTotal.divide(pointValue, java.math.RoundingMode.UP).intValue();
+            }
+
+            finalTotal = finalTotal.subtract(discountAmount); // Cập nhật lại số tiền khách phải trả
+
+            // Trừ điểm trong ví ngay lập tức
+            membership.setPoints(membership.getPoints() - pointsToUse);
+            membershipRepository.save(membership);
+
+            // Ghi vết vào Đơn hàng
+            order.setPointsUsed(pointsToUse);
+            order.setDiscountAmount(discountAmount);
+            log.info("💳 Khách hàng đã dùng {} điểm để giảm {} VNĐ", pointsToUse, discountAmount);
+        }
+
+        // 2. TÍNH TIỀN THỪA (Dựa trên finalTotal đã giảm giá)
         BigDecimal amountGiven = request.getAmountGiven();
         BigDecimal changeAmount = BigDecimal.ZERO;
 
         if (request.getPaymentMethod() == ngo.cong.thao.s2o_pro.order.entity.PaymentMethod.CASH) {
-            if (amountGiven == null || amountGiven.compareTo(order.getTotalAmount()) < 0) {
-                throw new IllegalArgumentException("Số tiền khách đưa không đủ để thanh toán!");
+            if (amountGiven == null || amountGiven.compareTo(finalTotal) < 0) {
+                throw new IllegalArgumentException("Số tiền khách đưa không đủ để thanh toán (" + finalTotal + " VNĐ)!");
             }
-            changeAmount = amountGiven.subtract(order.getTotalAmount());
+            changeAmount = amountGiven.subtract(finalTotal);
         } else {
-            // Chuyển khoản hoặc Quẹt thẻ thì mặc định coi như đưa vừa đủ
-            amountGiven = order.getTotalAmount();
+            amountGiven = finalTotal;
         }
 
-        // 3. Cập nhật dữ liệu
         order.setStatus(OrderStatus.PAID);
         order.setPaymentMethod(request.getPaymentMethod());
         order.setAmountGiven(amountGiven);
@@ -222,16 +268,28 @@ public class OrderServiceImpl implements OrderService {
 
         Order savedOrder = orderRepository.save(order);
 
-        // 4. Kích hoạt Event bắn pháo hoa
-        eventPublisher.publishEvent(new ngo.cong.thao.s2o_pro.order.event.OrderPaidEvent(
-                savedOrder.getId(),
-                savedOrder.getTotalAmount(),
-                savedOrder.getTenantId(),
-                savedOrder.getTableId()
-        ));
-
-        // Bắn thông báo về Bếp để giải phóng màn hình (Tùy chọn)
+        eventPublisher.publishEvent(new ngo.cong.thao.s2o_pro.order.event.OrderPaidEvent(savedOrder.getId(), savedOrder.getTotalAmount(), savedOrder.getTenantId(), savedOrder.getTableId()));
         notificationService.notifyOrderStatusChanged(savedOrder.getTenantId(), savedOrder.getId().toString(), "PAID", savedOrder.getTableId() != null ? savedOrder.getTableId() : "Giao hàng");
+
+        // 3. LOGIC TÍCH ĐIỂM MỚI (CHỈ TÍNH TRÊN SỐ TIỀN THỰC TRẢ - finalTotal)
+        if (savedOrder.getCustomerId() != null && finalTotal.compareTo(BigDecimal.ZERO) > 0) {
+
+            // Dùng Optional thuần túy, bỏ dùng Lambda để tránh lỗi effectively final
+            java.util.Optional<ngo.cong.thao.s2o_pro.user.entity.CustomerMembership> memOpt =
+                    membershipRepository.findByCustomerIdAndTenantId(savedOrder.getCustomerId(), savedOrder.getTenantId());
+
+            if (memOpt.isPresent()) {
+                ngo.cong.thao.s2o_pro.user.entity.CustomerMembership membership = memOpt.get();
+
+                int pointsEarned = finalTotal.intValue() / 10000; // 10k = 1 điểm
+                if (pointsEarned > 0) {
+                    membership.setPoints(membership.getPoints() + pointsEarned);
+                    membership.setTotalSpent(membership.getTotalSpent().add(finalTotal));
+                    membershipRepository.save(membership);
+                    log.info("🎁 Khách đã được cộng thêm {} điểm từ số tiền thực trả {} VNĐ", pointsEarned, finalTotal);
+                }
+            }
+        }
 
         return savedOrder;
     }
@@ -239,24 +297,18 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional(readOnly = true)
     public ngo.cong.thao.s2o_pro.order.dto.DashboardSummaryResponse getDashboardSummary(java.time.LocalDate startDate, java.time.LocalDate endDate) {
-
-        // 1. Xử lý thời gian (Nếu null thì mặc định lấy ngày hôm nay)
         java.time.LocalDateTime start = (startDate != null) ? startDate.atStartOfDay() : java.time.LocalDate.now().atStartOfDay();
         java.time.LocalDateTime end = (endDate != null) ? endDate.atTime(java.time.LocalTime.MAX) : java.time.LocalDate.now().atTime(java.time.LocalTime.MAX);
 
-        // 2. Gọi các hàm thống kê
         long totalOrders = orderRepository.countByStatusAndCreatedAtBetween(OrderStatus.PAID, start, end);
-
         BigDecimal revenue = orderRepository.sumRevenue(OrderStatus.PAID, start, end);
         BigDecimal dineInRev = orderRepository.sumRevenueByType(OrderStatus.PAID, OrderType.DINE_IN, start, end);
         BigDecimal deliveryRev = orderRepository.sumRevenueByType(OrderStatus.PAID, OrderType.DELIVERY, start, end);
 
-        // Lấy Top 5 món bán chạy nhất
         java.util.List<ngo.cong.thao.s2o_pro.order.dto.ItemSalesDto> topItems = orderRepository.getTopSellingItems(
                 OrderStatus.PAID, start, end, org.springframework.data.domain.PageRequest.of(0, 5)
         );
 
-        // 3. Đóng gói kết quả
         return ngo.cong.thao.s2o_pro.order.dto.DashboardSummaryResponse.builder()
                 .totalRevenue(revenue != null ? revenue : BigDecimal.ZERO)
                 .totalOrders(totalOrders)
@@ -265,21 +317,18 @@ public class OrderServiceImpl implements OrderService {
                 .topSellingItems(topItems)
                 .build();
     }
+
     @Override
     @Transactional
     public ngo.cong.thao.s2o_pro.order.dto.OrderResponse callForPayment(UUID orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy đơn hàng"));
 
-        // ---> BỔ SUNG CHỐT CHẶN Ở ĐÂY: Chỉ cho phép đơn DINE_IN <---
         if (order.getOrderType() != ngo.cong.thao.s2o_pro.order.entity.OrderType.DINE_IN) {
             throw new IllegalArgumentException("Tính năng gọi thanh toán chỉ áp dụng cho đơn ăn tại bàn!");
         }
 
-        // 1. Gọi hàm cập nhật trạng thái
         Order updatedOrder = updateOrderStatus(orderId, OrderStatus.PAYMENT_REQUESTED);
-
-        // 2. Chuyển đổi từ Order sang OrderResponse
         return ngo.cong.thao.s2o_pro.order.dto.OrderResponse.fromEntity(updatedOrder);
     }
 }

@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 public class OrderPayRequest {
     @NotNull(message = "Vui lòng chọn hình thức thanh toán")
     private PaymentMethod paymentMethod;
-
+    private Integer pointsToUse; //số điểm khách muốn xài
     // Nếu khách trả tiền mặt thì nhập vào đây, chuyển khoản thì bỏ trống
     private BigDecimal amountGiven;
 }

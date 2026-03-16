@@ -18,7 +18,8 @@ public class OrderResponse {
     private OrderType orderType;
     private OrderStatus status;
     private BigDecimal totalAmount;
-
+    private Integer pointsUsed;
+    private java.math.BigDecimal discountAmount;
     // DINE_IN
     private String tableId;
 
@@ -49,6 +50,8 @@ public class OrderResponse {
                 .paymentMethod(order.getPaymentMethod() != null ? order.getPaymentMethod().name() : null)
                 .amountGiven(order.getAmountGiven())
                 .changeAmount(order.getChangeAmount())
+                .pointsUsed(order.getPointsUsed())
+                .discountAmount(order.getDiscountAmount())
                 .build();
     }
 }
