@@ -71,7 +71,7 @@ public class DataSeeder implements CommandLineRunner {
                     .password(passwordEncoder.encode("123456"))
                     .fullName("Chủ nhà hàng Biển Đông")
                     .role(Role.OWNER)
-                    .tenantId(t1.getId().toString())
+                    .tenantId(t1.getDomain())
                     .isActive(true)
                     .build());
 
@@ -102,7 +102,7 @@ public class DataSeeder implements CommandLineRunner {
                     .password(passwordEncoder.encode("123456"))
                     .fullName("Chủ quán Katinat")
                     .role(Role.OWNER)
-                    .tenantId(t2.getId().toString())
+                    .tenantId(t2.getDomain())
                     .isActive(true)
                     .build());
 
@@ -132,7 +132,7 @@ public class DataSeeder implements CommandLineRunner {
                     .password(passwordEncoder.encode("123456"))
                     .fullName("Quản lý Gogi House")
                     .role(Role.OWNER)
-                    .tenantId(t3.getId().toString())
+                    .tenantId(t3.getDomain())
                     .isActive(true)
                     .build());
 

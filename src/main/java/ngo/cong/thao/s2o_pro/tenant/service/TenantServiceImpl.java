@@ -70,7 +70,7 @@ public class TenantServiceImpl implements TenantService {
                 .password(passwordEncoder.encode(randomPassword))
                 .fullName("Chủ quán " + tenant.getName())
                 .role(Role.OWNER) // Phân quyền cao nhất của Tenant
-                .tenantId(tenant.getId().toString())
+                .tenantId(tenant.getDomain())
                 .isActive(true) // User thì vẫn có isActive bình thường anh nhé
                 .build();
 

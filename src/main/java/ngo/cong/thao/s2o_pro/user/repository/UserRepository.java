@@ -10,4 +10,6 @@ import java.util.UUID;
 @Repository
 public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<User> findByUsername(String username);
+
+    java.util.List<ngo.cong.thao.s2o_pro.user.entity.User> findByTenantIdAndRoleIn(String tenantId, java.util.List<ngo.cong.thao.s2o_pro.user.entity.Role> roles);
 }
